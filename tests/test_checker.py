@@ -96,6 +96,28 @@ class TestChecker(unittest.TestCase):
         self.assertNotIn('你', hits)                       # 译文豁免第二人称
         self.assertFalse(any(v.rule == '并列词语之间使用加号' for v in vs))  # 英文公式豁免
 
+    # ---- 1.0.1 新增：字段类型区分 ----
+
+    def test_教师备注不检查句长与第二人称(self):
+        long_note = '本页逐行提问“这个成分承担什么句法功能”，让学生依据功能而不是词形作出判断，约三分钟，必要时请学生举例说明。'
+        self.assertEqual(check_text(long_note, 'note', CFG, kind='note'), [])
+        self.assertIn('讲解使用第二人称', rules('你应当先找出逻辑主语。'))
+        self.assertNotIn('讲解使用第二人称', rules('你先找出逻辑主语。', kind='table'))
+
+    def test_表格单元格不检查第二人称与句长(self):
+        cell = '我要是你，我就去。' + '这是一个用于测试的较长说明文字，' * 3
+        self.assertEqual(check_text(cell, 'table', CFG, kind='table'), [])
+
+    def test_公式不检查并列连接符号(self):
+        self.assertEqual(check_text('to + 动词原形', 'formula', CFG, kind='formula'), [])
+        self.assertEqual(check_text('It is + 形容词 + for + 名词 + to do', 'formula', CFG, kind='formula'), [])
+
+    def test_句长只计汉字(self):
+        mixed = 'This sentence contains many English words. ' + '汉字句子的长度需要单独计算。'
+        self.assertNotIn('单句超过规定长度', rules(mixed))
+        long_cn = '这是一个用于测试长度上限的汉语句子，' * 4
+        self.assertIn('单句超过规定长度', rules(long_cn))
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
