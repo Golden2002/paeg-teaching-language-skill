@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "note": "规则开关与阈值。可按学科或机构要求调整。",
+  "rules": {
+    "plus_as_conjunction": true,
+    "slash_as_conjunction": true,
+    "halfwidth_punct": true,
+    "level_number": true,
+    "max_sentence_length": 40
+  },
+  "advice": {
+    "plus_as_conjunction": "并列词语之间应当使用顿号或连词“与”",
+    "slash_as_conjunction": "并列词语之间应当使用顿号或连词“与”",
+    "halfwidth_punct": "中文文本应当使用全角标点",
+    "level_number": "层级编号应当保持一致，教学材料通常使用汉字数字",
+    "max_sentence_length": "单句一般不超过 40 字，建议拆分"
+  }
+}
