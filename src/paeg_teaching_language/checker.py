@@ -88,7 +88,17 @@ def _forbidden_map(cfg: Dict[str, Any]) -> List[Dict[str, str]]:
 
 
 def check_text(text: str, where: str, cfg: Dict[str, Any], kind: str = 'body') -> List[Violation]:
-    """检查一段文本。kind 取值：title / body / translation / en / formula。"""
+    """检查一段文本。
+
+    kind 取值：
+      title       标题（末尾不加句号）
+      body        讲解正文（全部规则）
+      note        教师备注（不检查句长与第二人称）
+      table       表格单元格（不检查句长与第二人称）
+      translation 例句译文（不检查第二人称与并列连接符号）
+      formula     公式（仅检查半角标点等格式问题）
+      en          英文例句（不检查）
+    """
     t = text or ''
     if kind == 'en' or ASCII_ONLY.match(t.strip() or ' '):
         return []
@@ -98,13 +108,13 @@ def check_text(text: str, where: str, cfg: Dict[str, Any], kind: str = 'body') -
     def add(category, rule, hit, advice):
         out.append(Violation(category, rule, where, hit, t[:80], advice))
 
-    # 1 违禁词
+    # 1 违禁词（所有中文文本均检查）
     for item in _forbidden_map(cfg):
         if item['word'] and item['word'] in t:
             add('禁用词', f"禁用词：{item['category']}", item['word'], item['advice'])
 
-    # 2 并列连接符号：仅当加号两侧都是汉字时判为并列（英文公式豁免）
-    if rules.get('plus_as_conjunction', True):
+    # 2 并列连接符号：仅当加号两侧都是汉字时判为并列（公式与英文豁免）
+    if rules.get('plus_as_conjunction', True) and kind not in ('formula', 'translation'):
         for m in re.finditer(r'\+', t):
             left = t[:m.start()].rstrip()
             right = t[m.end():].lstrip()
@@ -112,8 +122,8 @@ def check_text(text: str, where: str, cfg: Dict[str, Any], kind: str = 'body') -
                 add('标点', '并列词语之间使用加号', '+', '并列词语之间应当使用顿号或连词“与”')
                 break
 
-    # 3 并列斜杠：同样只判两侧都是汉字的情形
-    if rules.get('slash_as_conjunction', True):
+    # 3 并列斜杠
+    if rules.get('slash_as_conjunction', True) and kind not in ('formula', 'translation'):
         for m in re.finditer(r'[/／]', t):
             left = t[:m.start()].rstrip()
             right = t[m.end():].lstrip()
@@ -122,7 +132,7 @@ def check_text(text: str, where: str, cfg: Dict[str, Any], kind: str = 'body') -
                 break
 
     # 4 半角标点混入中文
-    if rules.get('halfwidth_punct', True):
+    if rules.get('halfwidth_punct', True) and kind != 'formula':
         m = re.search('[' + CJK + r'][,;:?!]', t) or re.search('[,;:?!][' + CJK + r']', t)
         if m:
             add('标点', '半角标点混入中文', m.group(0), '中文文本应当使用全角标点')
@@ -147,27 +157,29 @@ def check_text(text: str, where: str, cfg: Dict[str, Any], kind: str = 'body') -
         add('标点', '标题末尾使用句号', '。', '标题与副标题末尾不加句号')
 
     # 9 祈使式讲解
-    for p in IMPERATIVE_PATTERNS:
-        m = re.search(p, t.strip())
-        if m:
-            add('语体', '讲解使用祈使句', m.group(0), '讲解一律使用有主语的陈述句')
-            break
+    if kind in ('body', 'note'):
+        for p in IMPERATIVE_PATTERNS:
+            m = re.search(p, t.strip())
+            if m:
+                add('语体', '讲解使用祈使句', m.group(0), '讲解一律使用有主语的陈述句')
+                break
 
     # 10 第二人称
-    if kind not in ('translation', 'en', 'formula'):
+    if kind in ('body', 'note'):
         for p in SECOND_PERSON_PATTERNS:
             m = re.search(p, t)
             if m:
                 add('语体', '讲解使用第二人称', m.group(0), '讲解中不使用第二人称，可用“学生”或“我们”')
                 break
 
-    # 11 超长句
-    if rules.get('max_sentence_length'):
+    # 11 超长句（仅讲解正文；只计汉字，避免英文例句造成的误判）
+    if rules.get('max_sentence_length') and kind == 'body':
         limit = int(rules['max_sentence_length'])
         for sent in re.split(r'[。！？；]', t):
-            s = sent.strip()
-            if len(s) > limit:
-                add('语体', '单句超过规定长度', s[:limit] + '…', f'单句一般不超过 {limit} 字，建议拆分')
+            cn = sum(1 for ch in sent if '\u4e00' <= ch <= '\u9fff')
+            if cn > limit:
+                add('语体', '单句超过规定长度', f'{cn} 字',
+                    f'单个句子的汉字数一般不超过 {limit} 字，建议拆分')
                 break
     return out
 
@@ -195,6 +207,12 @@ def check_json(path: str, cfg: Dict[str, Any]) -> List[Violation]:
                     child_kind = 'translation'
                 elif k in ('title', 'subtitle', 'headline', 'kicker'):
                     child_kind = 'title'
+                elif k == 'note':
+                    child_kind = 'note'
+                elif k == 'rows':
+                    child_kind = 'table'
+                elif k == 'f':
+                    child_kind = 'formula'
                 walk(v, f'{path_str}.{k}', child_kind)
         elif isinstance(obj, list):
             for i, v in enumerate(obj):
