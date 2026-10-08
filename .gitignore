@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 报告与临时文件
+报告*.json
+check-report*.json
+*.tmp
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
